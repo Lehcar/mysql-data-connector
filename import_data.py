@@ -11,9 +11,7 @@ password = ""
 host = "localhost"
 db = "coral_test"
 directory_name = "Photo_data"
-# these should all be lowercase
-taxon_columns_names_list = ['taxon', 'phylum', 'kingdom', 'class', 'order', 'family', 'genus', 'species']
-photo_id_column_names = ['photo', 'id']
+photo_id_column_names = ['photo', 'id']  # all elements should be lowercase
 table_name = 'Photo_Table'
 
 logger = logging.getLogger()
@@ -53,48 +51,103 @@ def process_sheets(filename, sheet_dict):
         sheet_df = sheet_dict[key]
         sheet_df.dropna(axis=1, how='all')
         sheet_df.columns = map(str.lower, sheet_df.columns.astype(str))
-        photo_columns = []
-        taxon_columns = []
-        for column in sheet_df.columns:
-            if column in taxon_columns_names_list:
-                taxon_columns.append(column)
-            elif column in photo_id_column_names:
-                photo_columns.append(column)
-            else:
-                for taxon in taxon_columns_names_list:
-                    if taxon in column:
-                        taxon_columns.append(column)
-                # right now this is only a few elements
-                for id in photo_id_column_names:
-                    if id in column:
-                        photo_columns.append(column)
 
-        if len(photo_columns) == 0 or len(taxon_columns) == 0:
+        photo_column, target_columns = isolate_important_columns(sheet_df)
+
+        if photo_column == None or target_columns == None:
             logger.info("Deleted file {}, sheet {}".format(filename, key))
             del new_sheet_dict[key]
         else:
-            # Find a column that contains either 'photo' or 'id' in the column name with the least amount of null values
-            photo_column = (sheet_df[photo_columns].isnull().sum()).idxmin()
-            taxon_columns.append(photo_column)
-            new_sheet_dict[key] = sheet_df[taxon_columns]
-            print("Before deletion:")
-            print(new_sheet_dict[key].isnull().sum())
-            print("After Deletion:")
-            print(new_sheet_dict[key].isnull().sum())
-
-            if new_sheet_dict[key].empty:
-                logger.info("Deleted file {}, sheet {}".format(filename, key))
-                del new_sheet_dict[key]
-
-            # TODO: delete later, debug function
-            # print_debug(new_sheet_dict, filename)
+            print("Photo column: {}".format(photo_column))
+            print(target_columns)
+        #     # Find a column that contains either 'photo' or 'id' in the column name with the least amount of null values
+        #     photo_column = (sheet_df[photo_columns].isnull().sum()).idxmin()
+        #     new_sheet_dict[key] = add_primary_key(photo_column, taxon_columns, new_sheet_dict[key])
+        #     print("Before deletion:")
+        #     print(new_sheet_dict[key].isnull().sum())
+        #     print("After Deletion:")
+        #     print(new_sheet_dict[key].isnull().sum())
+        #
+        #     if new_sheet_dict[key].empty:
+        #         logger.info("Deleted file {}, sheet {}".format(filename, key))
+        #         del new_sheet_dict[key]
+        #
+        #     # TODO: delete later, debug function
+        #     # print_debug(new_sheet_dict, filename)
 
 
 def isolate_important_columns(sheet_df):
+    photo_columns = []
+    taxon_columns = []
+    kingdom_columns = []
+    phylumn_columns = []
+    class_columns = []
+    order_columns = []
+    family_columns = []
+    genus_columns = []
+    species_columns = []
+    target_columns = []
+
+    for column in sheet_df.columns:
+        # FIXME: Kinda hacky, maybe a switch statement would be better?
+        # TODO: see if there's a case where there's a column called GenusSpecies or some nonsense <_<
+        # otherwise change to elif statements
+        if 'taxon' in column:
+            taxon_columns.append(column)
+        if 'kingdom' in column:
+            kingdom_columns.append(column)
+        if 'phylumn' in column:
+            phylumn_columns.append(column)
+        if 'class' in column:
+            class_columns.append(column)
+        if 'order' in column:
+            order_columns.append(column)
+        if 'family' in column:
+            family_columns.append(column)
+        if 'genus' in column:
+            genus_columns.append(column)
+        if 'species' in column:
+            species_columns.append(column)
+
+        # right now this is only a few elements
+        for id in photo_id_column_names:
+            if id in column:
+                photo_columns.append(column)
+    if len(photo_columns) == 0:
+        return None, None
+    # FIXME: also hacky, might be my best option but gotta explore other options
+    target_columns.append(taxon_columns)
+    append_columns_helper(target_columns, kingdom_columns, sheet_df)
+    append_columns_helper(target_columns, phylumn_columns, sheet_df)
+    append_columns_helper(target_columns, class_columns, sheet_df)
+    append_columns_helper(target_columns, order_columns, sheet_df)
+    append_columns_helper(target_columns, family_columns, sheet_df)
+    append_columns_helper(target_columns, genus_columns, sheet_df)
+    append_columns_helper(target_columns, species_columns, sheet_df)
+
+    return sheet_df[photo_columns].isnull().sum().idxmin(), target_columns
 
 
-def build_primary_key(photo_column, taxon_columns, sheet_df):
-    print(taxon_columns)
+def append_columns_helper(master_list, column_list, sheet_df):
+    if len(column_list) == 0:
+        master_list.append("")
+    else:
+        master_list.append(sheet_df[column_list].isnull().sum().idxmin())
+
+
+def add_primary_key(photo_column, taxon_columns, sheet_df):
+    """
+    Builds primary key: Kingdom, phylum, class, order, family, genus, species
+     - e.g. K_kingdomName__P_phylumName__C_className__O_orderName__F_familyName__G_genusName__S_speciesName
+
+    :param photo_column:
+    :param taxon_columns:
+    :param sheet_df:
+    :return:
+    """
+    taxon_columns.append(photo_column)
+    sheet_df = sheet_df[taxon_columns]
+    return sheet_df
 
 
 def print_debug(new_sheet_dict, filename):
