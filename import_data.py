@@ -7,15 +7,31 @@ import logging
 import time
 
 # change these
-user = "root"
-password = ""
+user = ''
+password = ''
 host = "localhost"
-db = "coral_test"
+db = ''
 directory_name = "Photo_data"
 photo_id_column_names = ['photo', 'id']  # all elements should be lowercase
-table_name = 'Photo_Table'
+table_name = ''
 
 logger = logging.getLogger()
+
+
+# TODO: test this with an actual password instead of null
+def read_in_args():
+    # assumes program runs with 'python script_name.py username password db_name table_name'
+    if len(sys.argv) is not 5:
+        print("ERROR: must include username, password, db_name, and table_name as command line arguments")
+        # TODO: throw error
+
+    global user, password, db, table_name
+    user = sys.argv[1]
+    password = sys.argv[2]
+    if str.lower(password) == 'null':
+        password = ''
+    db = sys.argv[3]
+    table_name = sys.argv[4]
 
 
 def iterate_through_files():
@@ -176,11 +192,6 @@ def print_debug(new_sheet_dict, filename):
 #     df.to_csv('fileTSV.tsv', sep='\t', encoding='utf-8',  index=False, line_terminator='\r\n')
 #     return df
 
-# TODO: fix this
-def read_in_args():
-    if len(sys.argv) is not 3:
-        print("ERROR")
-
 
 def read_in_excel_sheets(filepath):
     sheet_dict = pd.read_excel(filepath, sheet_name=None, dtype=str)
@@ -204,6 +215,7 @@ def create_table():
 
     cursor = conn.cursor()
 
+    # FIXME: instead of dropping if it exists, check it if it exists before creating
     cursor.execute("DROP TABLE IF EXISTS {}".format(table_name))
 
     cursor.execute(
@@ -219,6 +231,7 @@ def send_to_mysql(df, filename, con):
 
 if __name__ == '__main__':
     start = time.clock()  # FIXME: depricated in python 3.8, find alternative
+    read_in_args()
     create_table()
     iterate_through_files()
     print("Total Runtime (in seconds): {}".format(time.clock() - start))
