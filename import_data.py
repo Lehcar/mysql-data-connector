@@ -4,6 +4,7 @@ import pandas as pd
 import sys
 import os
 import logging
+import time
 
 # change these
 user = "root"
@@ -54,19 +55,11 @@ def process_sheets(filename, sheet_dict):
 
         photo_column, target_columns = isolate_important_columns(sheet_df)
 
-        if photo_column == None or target_columns == None:
+        if photo_column is None or target_columns is None:
             logger.info("Deleted file {}, sheet {}".format(filename, key))
             del new_sheet_dict[key]
         else:
-            print("Photo column: {}".format(photo_column))
-            print(target_columns)
-        #     # Find a column that contains either 'photo' or 'id' in the column name with the least amount of null values
-        #     photo_column = (sheet_df[photo_columns].isnull().sum()).idxmin()
-        #     new_sheet_dict[key] = add_primary_key(photo_column, taxon_columns, new_sheet_dict[key])
-        #     print("Before deletion:")
-        #     print(new_sheet_dict[key].isnull().sum())
-        #     print("After Deletion:")
-        #     print(new_sheet_dict[key].isnull().sum())
+            build_primary_key(photo_column, target_columns, sheet_df)
         #
         #     if new_sheet_dict[key].empty:
         #         logger.info("Deleted file {}, sheet {}".format(filename, key))
@@ -80,7 +73,7 @@ def isolate_important_columns(sheet_df):
     photo_columns = []
     taxon_columns = []
     kingdom_columns = []
-    phylumn_columns = []
+    phylum_columns = []
     class_columns = []
     order_columns = []
     family_columns = []
@@ -96,8 +89,8 @@ def isolate_important_columns(sheet_df):
             taxon_columns.append(column)
         if 'kingdom' in column:
             kingdom_columns.append(column)
-        if 'phylumn' in column:
-            phylumn_columns.append(column)
+        if 'phylum' in column:
+            phylum_columns.append(column)
         if 'class' in column:
             class_columns.append(column)
         if 'order' in column:
@@ -113,12 +106,16 @@ def isolate_important_columns(sheet_df):
         for id in photo_id_column_names:
             if id in column:
                 photo_columns.append(column)
-    if len(photo_columns) == 0:
+    if len(photo_columns) == 0 or (len(taxon_columns) == 0 and len(kingdom_columns) == 0 and len(phylum_columns) == 0
+                                   and len(class_columns) == 0 and len(order_columns) == 0 and
+                                   len(family_columns) == 0 and len(genus_columns) == 0
+                                   and len(species_columns) == 0):
         return None, None
+
     # FIXME: also hacky, might be my best option but gotta explore other options
-    target_columns.append(taxon_columns)
+    append_columns_helper(target_columns, taxon_columns, sheet_df)
     append_columns_helper(target_columns, kingdom_columns, sheet_df)
-    append_columns_helper(target_columns, phylumn_columns, sheet_df)
+    append_columns_helper(target_columns, phylum_columns, sheet_df)
     append_columns_helper(target_columns, class_columns, sheet_df)
     append_columns_helper(target_columns, order_columns, sheet_df)
     append_columns_helper(target_columns, family_columns, sheet_df)
@@ -130,24 +127,35 @@ def isolate_important_columns(sheet_df):
 
 def append_columns_helper(master_list, column_list, sheet_df):
     if len(column_list) == 0:
-        master_list.append("")
+        master_list.append('')
     else:
         master_list.append(sheet_df[column_list].isnull().sum().idxmin())
 
 
-def add_primary_key(photo_column, taxon_columns, sheet_df):
+def build_primary_key(photo_column, target_columns, sheet_df):
     """
     Builds primary key: Kingdom, phylum, class, order, family, genus, species
-     - e.g. K_kingdomName__P_phylumName__C_className__O_orderName__F_familyName__G_genusName__S_speciesName
+     - e.g. K_kingdomName__P_phylumame__C_className__O_orderName__F_familyName__G_genusName__S_speciesName
 
     :param photo_column:
     :param taxon_columns:
     :param sheet_df:
     :return:
     """
-    taxon_columns.append(photo_column)
-    sheet_df = sheet_df[taxon_columns]
-    return sheet_df
+    # FIXME: split the taxon name!!!!!!!!!!!! ;_____________________;
+    prefixes = ['T', 'K', 'P', 'C', 'O', 'F', 'G', 'S']
+    key = ''
+    for i in range(0, len(target_columns)):
+        key += prefixes[i]
+        if target_columns[i] is not '':
+            key += '_'
+            print('todo')
+            key += 'rowValue'
+        key += '__'
+    print(key)
+    # delete blank primary keys (e.g. x is not 'K__P__C__O__F__G__S__')
+
+    return key
 
 
 def print_debug(new_sheet_dict, filename):
@@ -198,7 +206,8 @@ def create_table():
 
     cursor.execute("DROP TABLE IF EXISTS {}".format(table_name))
 
-    cursor.execute("CREATE TABLE {} (taxon VARCHAR(255) PRIMARY KEY, photo_ids LONGTEXT, row_num INT)".format(table_name))
+    cursor.execute(
+        "CREATE TABLE {} (taxon VARCHAR(255) PRIMARY KEY, photo_ids LONGTEXT, row_num INT)".format(table_name))
 
     conn.close()
 
@@ -209,15 +218,17 @@ def send_to_mysql(df, filename, con):
 
 
 if __name__ == '__main__':
+    start = time.clock()  # FIXME: depricated in python 3.8, find alternative
     create_table()
     iterate_through_files()
+    print("Total Runtime (in seconds): {}".format(time.clock() - start))
     # df = convert_xlsx_to_tsv()
     # send_to_mysql(df, '2008.Mayotte.xls', con)
     # con.close()
 
 # Primary key
-# P_PhylumName__F_FamilyName
-# P_PhylumName__G_GenusName
+# P_phylumame__F_FamilyName
+# P_phylumame__G_GenusName
 
 # Photos
 # array of photo files
