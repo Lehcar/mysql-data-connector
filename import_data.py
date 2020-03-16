@@ -161,7 +161,7 @@ def build_primary_key(photo_column, target_columns, sheet_df):
     # FIXME: split the taxon name!!!!!!!!!!!! ;_____________________;
     prefixes = ['T', 'K', 'P', 'C', 'O', 'F', 'G', 'S']
     key = ''
-    for i in range(0, len(target_columns)):
+    for i in range(1, len(target_columns)):  # target_columns[0] is the taxon row which isn't consistent
         key += prefixes[i]
         if target_columns[i] is not '':
             key += '_'
@@ -186,23 +186,24 @@ def print_debug(new_sheet_dict, filename):
         print()
 
 
-# def convert_xlsx_to_tsv():
-#     df = pd.read_excel("/Users/lehcar/Documents/Spring 2020/CS 180H/coral_data_python/Photo_data/2008.Mayotte.xls")
-#     print(df.head())
-#     df.to_csv('fileTSV.tsv', sep='\t', encoding='utf-8',  index=False, line_terminator='\r\n')
-#     return df
+def convert_excel_to_tsv(excel_filepath, new_tsv_filepath):
+    """
+        Helper function to convert excel files to tsv files.
+        INFO: not currently used in the program, but left in for potential future usage
+
+        :param excel_filepath: filepath to the xls or xlsx file (excel file)
+        :param new_tsv_filepath: filepath where the new .tsv file will be written to
+        :return: returns a dataframe containing the contents of the excel file
+    """
+    df = pd.read_excel(excel_filepath)
+    print(df.head())
+    df.to_csv(new_tsv_filepath, sep='\t', encoding='utf-8', index=False, line_terminator='\r\n')
+    return df
 
 
 def read_in_excel_sheets(filepath):
     sheet_dict = pd.read_excel(filepath, sheet_name=None, dtype=str)
     return sheet_dict
-
-
-def read_in_excel(filepath):
-    df = pd.read_excel(filepath)
-    # process dataframe
-    # set primary key'
-    return df
 
 
 def create_table():
@@ -215,11 +216,11 @@ def create_table():
 
     cursor = conn.cursor()
 
-    # FIXME: instead of dropping if it exists, check it if it exists before creating
-    cursor.execute("DROP TABLE IF EXISTS {}".format(table_name))
+    # # FIXME: instead of dropping if it exists, check it if it exists before creating
+    # cursor.execute("DROP TABLE IF EXISTS {}".format(table_name))
 
     cursor.execute(
-        "CREATE TABLE {} (taxon VARCHAR(255) PRIMARY KEY, photo_ids LONGTEXT, row_num INT)".format(table_name))
+        "CREATE TABLE IF NOT EXISTS {} (taxon VARCHAR(255) PRIMARY KEY, photo_ids LONGTEXT, row_num INT)".format(table_name))
 
     conn.close()
 
