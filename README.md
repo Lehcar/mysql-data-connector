@@ -1,4 +1,4 @@
-#Script to Import Excel Photo Data into MySQL Table
+# Script to Import Excel Photo Data into MySQL Table
 ## Acknowledgements:
 TODO
 ## Before you run:

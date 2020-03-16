@@ -3,8 +3,8 @@ from sqlalchemy import create_engine
 import pandas as pd
 import sys
 import os
-import logging
 import time
+import math
 
 # change these
 user = ''
@@ -14,16 +14,14 @@ db = ''
 directory_name = "Photo_data"
 photo_id_column_names = ['photo', 'id']  # all elements should be lowercase
 table_name = ''
-
-logger = logging.getLogger()
+PRIMARY_KEY_COL_NAME = 'taxon_key'  # note: this should not be taxon
 
 
 # TODO: test this with an actual password instead of null
 def read_in_args():
     # assumes program runs with 'python script_name.py username password db_name table_name'
     if len(sys.argv) is not 5:
-        print("ERROR: must include username, password, db_name, and table_name as command line arguments")
-        # TODO: throw error
+        raise Exception('must include username, password, db_name, and table_name as command line arguments')
 
     global user, password, db, table_name
     user = sys.argv[1]
@@ -56,6 +54,7 @@ def iterate_through_files():
     # end of for loop
     con.close()
 
+    # TODO: remove redirect output code later
     # end of redirected output
     sys.stdout = orig_stdout
     f.close()
@@ -63,7 +62,7 @@ def iterate_through_files():
 
 def process_sheets(filename, sheet_dict):
     new_sheet_dict = sheet_dict.copy()
-    # TODO: add logging
+
     for key in sheet_dict.keys():  # Doesn't work right
         sheet_df = sheet_dict[key]
         sheet_df.dropna(axis=1, how='all')
@@ -72,13 +71,11 @@ def process_sheets(filename, sheet_dict):
         photo_column, target_columns = isolate_important_columns(sheet_df)
 
         if photo_column is None or target_columns is None:
-            logger.info("Deleted file {}, sheet {}".format(filename, key))
             del new_sheet_dict[key]
         else:
             build_primary_key(photo_column, target_columns, sheet_df)
         #
         #     if new_sheet_dict[key].empty:
-        #         logger.info("Deleted file {}, sheet {}".format(filename, key))
         #         del new_sheet_dict[key]
         #
         #     # TODO: delete later, debug function
@@ -151,27 +148,34 @@ def append_columns_helper(master_list, column_list, sheet_df):
 def build_primary_key(photo_column, target_columns, sheet_df):
     """
     Builds primary key: Kingdom, phylum, class, order, family, genus, species
-     - e.g. K_kingdomName__P_phylumame__C_className__O_orderName__F_familyName__G_genusName__S_speciesName
+         - e.g. K_kingdomName__P_phylumame__C_className__O_orderName__F_familyName__G_genusName__S_speciesName
 
-    :param photo_column:
-    :param taxon_columns:
-    :param sheet_df:
-    :return:
+        :param photo_column:
+        :param taxon_columns:
+        :param sheet_df:
+        :return:
     """
     # FIXME: split the taxon name!!!!!!!!!!!! ;_____________________;
     prefixes = ['T', 'K', 'P', 'C', 'O', 'F', 'G', 'S']
-    key = ''
-    for i in range(1, len(target_columns)):  # target_columns[0] is the taxon row which isn't consistent
-        key += prefixes[i]
+    sheet_df[PRIMARY_KEY_COL_NAME] = ''  # sets the column to a blank string as the default value
+    for i in range(1, len(prefixes)):
         if target_columns[i] is not '':
-            key += '_'
-            print('todo')
-            key += 'rowValue'
-        key += '__'
-    print(key)
-    # delete blank primary keys (e.g. x is not 'K__P__C__O__F__G__S__')
+            curr_column = list(sheet_df[target_columns[i]])
+            keys_column = list(sheet_df[PRIMARY_KEY_COL_NAME])
+            for j in range(0, len(curr_column)):
+                if type(curr_column[j]) is not float:  # null values show up as 'nan'
+                    value = str(curr_column[j])
+                    keys_column[j] = keys_column[j] + prefixes[i] + '_' + value + '_'
+                else:
+                    keys_column[j] = keys_column[j] + prefixes[i] + '__'
+            sheet_df[PRIMARY_KEY_COL_NAME] = keys_column
+        else:
+            sheet_df[PRIMARY_KEY_COL_NAME] = sheet_df[PRIMARY_KEY_COL_NAME].apply(lambda x: x + prefixes[i] + '__')
+    print('Key column: ')
+    print(sheet_df[PRIMARY_KEY_COL_NAME])
+    print()
 
-    return key
+    # delete blank primary keys (e.g. x is not 'K__P__C__O__F__G__S__')
 
 
 def print_debug(new_sheet_dict, filename):
@@ -218,9 +222,12 @@ def create_table():
 
     # # FIXME: instead of dropping if it exists, check it if it exists before creating
     # cursor.execute("DROP TABLE IF EXISTS {}".format(table_name))
+    sql = "CREATE TABLE IF NOT EXISTS {} ({} VARCHAR(255) PRIMARY KEY, taxon VARCHAR(255), photo_ids LONGTEXT, " \
+          "row_num INT);".format(table_name, PRIMARY_KEY_COL_NAME)
 
-    cursor.execute(
-        "CREATE TABLE IF NOT EXISTS {} (taxon VARCHAR(255) PRIMARY KEY, photo_ids LONGTEXT, row_num INT)".format(table_name))
+    print(sql)
+
+    cursor.execute(sql)
 
     conn.close()
 
