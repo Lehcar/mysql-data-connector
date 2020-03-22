@@ -72,8 +72,11 @@ def process_sheets(filename, sheet_dict):
 
         if photo_column is None or target_columns is None:
             del new_sheet_dict[key]
-        else:
-            build_primary_key(photo_column, target_columns, sheet_df)
+            continue
+
+        sheet_df = build_primary_key(photo_column, target_columns, sheet_df)
+
+        get_subset(filename, sheet_df, target_columns[0], photo_column)
         #
         #     if new_sheet_dict[key].empty:
         #         del new_sheet_dict[key]
@@ -155,7 +158,6 @@ def build_primary_key(photo_column, target_columns, sheet_df):
         :param sheet_df:
         :return:
     """
-    # FIXME: split the taxon name!!!!!!!!!!!! ;_____________________;
     prefixes = ['T', 'K', 'P', 'C', 'O', 'F', 'G', 'S']
     sheet_df[PRIMARY_KEY_COL_NAME] = ''  # sets the column to a blank string as the default value
     for i in range(1, len(prefixes)):
@@ -171,11 +173,36 @@ def build_primary_key(photo_column, target_columns, sheet_df):
             sheet_df[PRIMARY_KEY_COL_NAME] = keys_column
         else:
             sheet_df[PRIMARY_KEY_COL_NAME] = sheet_df[PRIMARY_KEY_COL_NAME].apply(lambda x: x + prefixes[i] + '__')
-    print('Key column: ')
-    print(sheet_df[PRIMARY_KEY_COL_NAME])
-    print()
 
-    # delete blank primary keys (e.g. x is not 'K__P__C__O__F__G__S__')
+    # delete blank primary keys (e.g. x is not 'K__P__C__O__F__G__S__') and keys without a taxon column value
+    taxon_column = target_columns[0]
+    if taxon_column is '':
+        sheet_df = sheet_df[sheet_df[PRIMARY_KEY_COL_NAME] != 'K__P__C__O__F__G__S__']
+        return sheet_df
+
+    sheet_df = sheet_df[(sheet_df[PRIMARY_KEY_COL_NAME] != 'K__P__C__O__F__G__S__') &
+                        (sheet_df[target_columns[0]] != None)]
+
+    print(sheet_df.head())
+    # new_df = pd.DataFrame(sheet_df, columns=kept_columns)
+    # print(new_df.head())
+    return sheet_df
+
+
+def get_subset(filename, sheet_df, taxon_column, photo_id_column):
+    # Photo_table(taxon_key
+    # VARCHAR(255)
+    # PRIMARY
+    # KEY, taxon
+    # VARCHAR(255), photo_ids
+    # LONGTEXT, row_num
+    # INT);
+    new_df = pd.DataFrame()
+    new_df[PRIMARY_KEY_COL_NAME] = sheet_df[PRIMARY_KEY_COL_NAME]
+    # new_df['taxon'] = sheet_df[taxon_column]
+    new_df['photo_id'] = sheet_df[photo_id_column]
+    new_df['filename'] = filename
+    print(new_df.head())
 
 
 def print_debug(new_sheet_dict, filename):
