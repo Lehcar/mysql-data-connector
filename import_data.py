@@ -1,12 +1,11 @@
+import os
+import time
+import sys
+
 import mysql.connector
 from sqlalchemy import create_engine
 import pandas as pd
-import sys
-import os
-import time
-import math
 
-# change these
 user = ''
 password = ''
 host = "localhost"
@@ -15,13 +14,18 @@ directory_name = "Photo_data"
 photo_id_column_names = ['photo', 'id']  # all elements should be lowercase
 table_name = ''
 PRIMARY_KEY_COL_NAME = 'taxon_key'  # note: this should not be taxon
+conn = None
 
 
-# TODO: test this with an actual password instead of null
 def read_in_args():
-    # assumes program runs with 'python script_name.py username password db_name table_name'
+    """
+    Sets mysql user, password, database, and table_name based on command line arguments.
+    Assumes program runs with 'python script_name.py username password db_name table_name' command.
+    Raises an exception if there is a missing argument.
+
+    """
     if len(sys.argv) is not 5:
-        raise Exception('must include username, password, db_name, and table_name as command line arguments')
+        raise Exception('Must include username, password, db_name, and table_name as command line arguments')
 
     global user, password, db, table_name
     user = sys.argv[1]
@@ -33,16 +37,14 @@ def read_in_args():
 
 
 def iterate_through_files():
-    # TODO: remove later, redirect output to a file
-    import sys
-    orig_stdout = sys.stdout
-    f = open('sheets.txt', 'w')
-    sys.stdout = f
+    """
 
+    """
     # connect to mysql
     engine = create_engine("mysql://{}:{}@{}/{}".format(user, password, host, db))
     con = engine.connect()
     dir = os.getcwd() + "/" + directory_name
+    total_num_excel_files = 0
     for filename in os.listdir(dir):
         if (filename.endswith(".xlsx") or filename.endswith(".xls")) and not filename.startswith('~$'):
             # check for excel file extension
@@ -50,17 +52,19 @@ def iterate_through_files():
             filepath = dir + "/" + filename
             sheet_dict = read_in_excel_sheets(filepath)
             process_sheets(filename, sheet_dict)
+            total_num_excel_files += 1
 
+    print('{} excel files processed'.format(total_num_excel_files))
     # end of for loop
     con.close()
 
-    # TODO: remove redirect output code later
-    # end of redirected output
-    sys.stdout = orig_stdout
-    f.close()
-
 
 def process_sheets(filename, sheet_dict):
+    """
+
+    :param filename:
+    :param sheet_dict:
+    """
     new_sheet_dict = sheet_dict.copy()
 
     for key in sheet_dict.keys():  # Doesn't work right
@@ -77,15 +81,14 @@ def process_sheets(filename, sheet_dict):
         sheet_df = build_primary_key(photo_column, target_columns, sheet_df)
 
         get_subset(filename, sheet_df, target_columns[0], photo_column)
-        #
-        #     if new_sheet_dict[key].empty:
-        #         del new_sheet_dict[key]
-        #
-        #     # TODO: delete later, debug function
-        #     # print_debug(new_sheet_dict, filename)
 
 
 def isolate_important_columns(sheet_df):
+    """
+
+    :param sheet_df:
+    :return:
+    """
     photo_columns = []
     taxon_columns = []
     kingdom_columns = []
@@ -142,6 +145,13 @@ def isolate_important_columns(sheet_df):
 
 
 def append_columns_helper(master_list, column_list, sheet_df):
+    """
+
+    :param master_list:
+    :param column_list:
+    :param sheet_df:
+    :return:
+    """
     if len(column_list) == 0:
         master_list.append('')
     else:
@@ -151,12 +161,12 @@ def append_columns_helper(master_list, column_list, sheet_df):
 def build_primary_key(photo_column, target_columns, sheet_df):
     """
     Builds primary key: Kingdom, phylum, class, order, family, genus, species
-         - e.g. K_kingdomName__P_phylumame__C_className__O_orderName__F_familyName__G_genusName__S_speciesName
+         - e.g. K_kingdomName__P_phylumName__C_className__O_orderName__F_familyName__G_genusName__S_speciesName__
 
-        :param photo_column:
-        :param taxon_columns:
-        :param sheet_df:
-        :return:
+    :param photo_column:
+    :param taxon_columns:
+    :param sheet_df:
+    :return:
     """
     prefixes = ['T', 'K', 'P', 'C', 'O', 'F', 'G', 'S']
     sheet_df[PRIMARY_KEY_COL_NAME] = ''  # sets the column to a blank string as the default value
@@ -175,46 +185,39 @@ def build_primary_key(photo_column, target_columns, sheet_df):
             sheet_df[PRIMARY_KEY_COL_NAME] = sheet_df[PRIMARY_KEY_COL_NAME].apply(lambda x: x + prefixes[i] + '__')
 
     # delete blank primary keys (e.g. x is not 'K__P__C__O__F__G__S__') and keys without a taxon column value
+    # if there is no 'taxon' column:
     taxon_column = target_columns[0]
     if taxon_column is '':
         sheet_df = sheet_df[sheet_df[PRIMARY_KEY_COL_NAME] != 'K__P__C__O__F__G__S__']
         return sheet_df
 
+    # if there's a taxon column, only delete rows with no key and no value for taxon
     sheet_df = sheet_df[(sheet_df[PRIMARY_KEY_COL_NAME] != 'K__P__C__O__F__G__S__') &
                         (sheet_df[target_columns[0]] != None)]
 
-    print(sheet_df.head())
-    # new_df = pd.DataFrame(sheet_df, columns=kept_columns)
-    # print(new_df.head())
     return sheet_df
 
 
 def get_subset(filename, sheet_df, taxon_column, photo_id_column):
-    # Photo_table(taxon_key
-    # VARCHAR(255)
-    # PRIMARY
-    # KEY, taxon
-    # VARCHAR(255), photo_ids
-    # LONGTEXT, row_num
-    # INT);
     new_df = pd.DataFrame()
     new_df[PRIMARY_KEY_COL_NAME] = sheet_df[PRIMARY_KEY_COL_NAME]
-    # new_df['taxon'] = sheet_df[taxon_column]
+    if taxon_column is '':
+        new_df['taxon'] = None
+    else:
+        new_df['taxon'] = sheet_df[taxon_column]
     new_df['photo_id'] = sheet_df[photo_id_column]
     new_df['filename'] = filename
-    print(new_df.head())
+    new_df.drop_duplicates(subset='photo_id', keep='first', inplace=True)
+    send_to_mysql(new_df, 'table_with_photo_id')
 
 
-def print_debug(new_sheet_dict, filename):
-    for key in new_sheet_dict.keys():
-        df = new_sheet_dict[key]
-        print("Reading in: {}_{}".format(filename, key))
-        print(df.head())
-        print(df.columns)
-        print(df.isnull().sum())
-        print(df.columns)
-        print(df.isnull().sum())
-        print()
+def print_debug(df):
+    print(df.head())
+    print("INDEX: {}".format(df.index))
+    print("COLUMNS: {}".format(df.columns))
+    print("NULL COUNTS: {}".format(df.isnull().sum()))
+    print(df.dtypes)
+    print()
 
 
 def convert_excel_to_tsv(excel_filepath, new_tsv_filepath):
@@ -227,7 +230,6 @@ def convert_excel_to_tsv(excel_filepath, new_tsv_filepath):
         :return: returns a dataframe containing the contents of the excel file
     """
     df = pd.read_excel(excel_filepath)
-    print(df.head())
     df.to_csv(new_tsv_filepath, sep='\t', encoding='utf-8', index=False, line_terminator='\r\n')
     return df
 
@@ -238,6 +240,7 @@ def read_in_excel_sheets(filepath):
 
 
 def create_table():
+    global conn
     conn = mysql.connector.connect(
         host=host,
         user=user,
@@ -247,49 +250,61 @@ def create_table():
 
     cursor = conn.cursor()
 
-    # # FIXME: instead of dropping if it exists, check it if it exists before creating
-    # cursor.execute("DROP TABLE IF EXISTS {}".format(table_name))
-    sql = "CREATE TABLE IF NOT EXISTS {} ({} VARCHAR(255) PRIMARY KEY, taxon VARCHAR(255), photo_ids LONGTEXT, " \
-          "row_num INT);".format(table_name, PRIMARY_KEY_COL_NAME)
-
-    print(sql)
+    sql = "DROP TABLE IF EXISTS {}".format(table_name)
 
     cursor.execute(sql)
 
+    sql = "CREATE TABLE IF NOT EXISTS {} ({} VARCHAR(255), " \
+          "photo_id LONGTEXT, filename LONGTEXT);".format(table_name, PRIMARY_KEY_COL_NAME)
+
+    cursor.execute(sql)
+
+    # FIXME: unable to have photo_id as index due to duplicate values
+    sql = "CREATE TABLE IF NOT EXISTS main_table(photo_id VARCHAR(255), taxon_key VARCHAR(255), " \
+          "taxon VARCHAR(255), filename VARCHAR(255));"
+
+    cursor.execute(sql)
     conn.close()
 
 
-def send_to_mysql(df, filename, con):
-    filename = filename.replace('.', '_')
-    df.to_sql(name=filename, con=con, if_exists='append')
+def send_to_mysql(df, name):
+    db_con = create_engine('mysql+mysqlconnector://{}:{}@{}/{}'.format(user, password, host, db))
+    df.to_sql(con=db_con, name=name, if_exists='append', index=False)
+
+
+def create_primary_key_table():
+    df = read_in_mysql()
+    df = process_data_frame(df)
+    df.to_csv('table_with_key.tsv', sep='\t', encoding='utf-8', index=True, line_terminator='\r\n')
+    df.to_csv('table_with_key.csv', index=True)
+    db_con = create_engine('mysql+mysqlconnector://{}:{}@{}/{}'.format(user, password, host, db))
+    df.to_sql(con=db_con, name=table_name, if_exists='append', index=True)
+
+
+def read_in_mysql():
+    db_con = create_engine('mysql+mysqlconnector://{}:{}@{}/{}'.format(user, password, host, db)).connect()
+    df = pd.read_sql("select * from table_with_photo_id", db_con)
+    df.drop_duplicates(keep='first', inplace=True)
+    db_con.close()
+    df.to_csv('table_with_photo_id.tsv', sep='\t', encoding='utf-8', index=False, line_terminator='\r\n')
+    df.to_csv('table_with_photo_id.csv', index=False)
+    return df
+
+
+def process_data_frame(df):
+    if 'taxon' in df.columns:
+        df.drop(['taxon'], inplace=True, axis=1)
+    df = df.groupby(PRIMARY_KEY_COL_NAME, as_index=True).aggregate(lambda x: '; '.join(map(str, x)))
+    return df
 
 
 if __name__ == '__main__':
     start = time.clock()  # FIXME: depricated in python 3.8, find alternative
+
     read_in_args()
     create_table()
     iterate_through_files()
+    create_primary_key_table()
+
     print("Total Runtime (in seconds): {}".format(time.clock() - start))
-    # df = convert_xlsx_to_tsv()
-    # send_to_mysql(df, '2008.Mayotte.xls', con)
-    # con.close()
 
-# Primary key
-# P_phylumame__F_FamilyName
-# P_phylumame__G_GenusName
-
-# Photos
-# array of photo files
-
-# dFar.xls
-# rows 238-240: ignore the notes after the semi-colon
-# Taxon column: 2 words, first is Genus, then species
-# ignore files without genus, species, phylum, or taxon column
-
-# Maybe a separate table with photo ID as the primary key?
-# Columns naming the original spreadsheet and row number (for the first one)
-
-
-# NOTES: added a header to second sheet of dAUST1.xlsx
-
-# Ask about ArtMadaPhotos.xls sheet 3
